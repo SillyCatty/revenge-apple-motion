@@ -1,0 +1,19 @@
+{
+  "name": "revenge-apple-motion",
+  "version": "1.0.0",
+  "description": "Revenge/Vendetta plugin bringing Apple-style spring physics and rubber-banding to Discord",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/react": "^18.2.0",
+    "@types/react-native": "^0.72.0",
+    "rollup": "^4.9.6",
+    "typescript": "^5.3.3"
+  }
+}

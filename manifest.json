@@ -1,0 +1,7 @@
+{
+  "name": "AppleMotion",
+  "description": "Applies Apple-style damped harmonic springs and UIKit rubber-banding to Discord mobile interactions.",
+  "author": "Milky",
+  "version": "1.0.0",
+  "main": "index.js"
+}
