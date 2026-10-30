@@ -20,19 +20,21 @@
   const plugin = {
     onLoad: () => {
       try {
-        const vendetta = window.vendetta;
+        const vendetta = window.vendetta || window.revenge || window.bunny;
         if (!vendetta) {
           console.warn("[AppleMotion] Vendetta/Revenge global not found.");
           return;
         }
 
-        const { findByProps } = vendetta.metro;
-        const { instead } = vendetta.patcher;
+        const metro = vendetta.metro;
+        const patcher = vendetta.patcher;
 
-        const Animated = findByProps("spring", "timing", "decay");
+        if (!metro || !patcher) return;
+
+        const Animated = metro.findByProps("spring", "timing", "decay");
         if (Animated && Animated.spring) {
           unpatches.push(
-            instead("spring", Animated, (args, orig) => {
+            patcher.instead("spring", Animated, (args, orig) => {
               const [value, config] = args;
               const patchedConfig = Object.assign({}, config, {
                 useNativeDriver: config.useNativeDriver !== undefined ? config.useNativeDriver : true,
@@ -61,6 +63,14 @@
       console.log("[AppleMotion] Plugin unloaded.");
     },
   };
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = plugin;
+    module.exports.default = plugin;
+  }
+  if (typeof exports !== "undefined") {
+    exports.default = plugin;
+  }
 
   return plugin;
 })();
