@@ -1,66 +1,122 @@
 (() => {
   "use strict";
 
-  const RUBBER_BAND_COEFFICIENT = 0.55;
-
-  function rubberBand(pull, dimension, coefficient = RUBBER_BAND_COEFFICIENT) {
-    if (dimension <= 0 || pull === 0) return 0;
-    const offset = (1 - 1 / ((coefficient * Math.abs(pull)) / dimension + 1)) * dimension;
-    return pull < 0 ? -offset : offset;
-  }
-
-  const AppleSpringConfig = {
-    smooth: { stiffness: 280, damping: 30, mass: 1 },
-    snappy: { stiffness: 350, damping: 28, mass: 1 },
-    bouncy: { stiffness: 400, damping: 24, mass: 1 },
+  const AppleSpring = {
+    // Apple HIG Damped Harmonic Spring preset
+    stiffness: 300,
+    damping: 28,
+    mass: 1,
+    restDisplacementThreshold: 0.001,
+    restSpeedThreshold: 0.001,
   };
 
-  let unpatches = [];
+  let cleanups = [];
 
   const plugin = {
     onLoad: () => {
       try {
-        const vendetta = window.vendetta || window.revenge || window.bunny;
-        if (!vendetta) {
-          console.warn("[AppleMotion] Vendetta/Revenge global not found.");
+        const v = window.vendetta || window.revenge || window.bunny;
+        if (!v) {
+          console.warn("[AppleMotion] Mod loader global not found.");
           return;
         }
 
-        const metro = vendetta.metro;
-        const patcher = vendetta.patcher;
+        const metro = v.metro;
+        const patcher = v.patcher;
 
-        if (!metro || !patcher) return;
+        // Show a visual toast in Discord so you know the plugin actually activated
+        try {
+          const toasts = v.ui && v.ui.toasts;
+          if (toasts && toasts.showToast) {
+            toasts.showToast("Apple Motion Enabled", toasts.getAssetIDByName ? toasts.getAssetIDByName("ic_theme_24px") : undefined);
+          }
+        } catch (_) {}
 
-        const Animated = metro.findByProps("spring", "timing", "decay");
-        if (Animated && Animated.spring) {
-          unpatches.push(
-            patcher.instead("spring", Animated, (args, orig) => {
-              const [value, config] = args;
-              const patchedConfig = Object.assign({}, config, {
-                useNativeDriver: config.useNativeDriver !== undefined ? config.useNativeDriver : true,
-                stiffness: config.stiffness || AppleSpringConfig.smooth.stiffness,
-                damping: config.damping || AppleSpringConfig.smooth.damping,
-                mass: config.mass || AppleSpringConfig.smooth.mass,
+        // 1. Hook React Native Reanimated (used for modern Discord gestures & sheets)
+        try {
+          const Reanimated = metro.findByProps("useSharedValue", "withSpring") || metro.findByProps("withSpring");
+          if (Reanimated && Reanimated.withSpring) {
+            const origWithSpring = Reanimated.withSpring;
+            const patchedWithSpring = function (toValue, userConfig, callback) {
+              const mergedConfig = Object.assign({}, userConfig, {
+                stiffness: AppleSpring.stiffness,
+                damping: AppleSpring.damping,
+                mass: AppleSpring.mass,
               });
-              return orig(value, patchedConfig);
-            })
-          );
+              return origWithSpring.call(this, toValue, mergedConfig, callback);
+            };
+
+            // Preserve worklet metadata if present
+            if (origWithSpring._workletFlag) {
+              patchedWithSpring._workletFlag = origWithSpring._workletFlag;
+            }
+
+            Reanimated.withSpring = patchedWithSpring;
+            cleanups.push(() => {
+              Reanimated.withSpring = origWithSpring;
+            });
+            console.log("[AppleMotion] Patched Reanimated.withSpring successfully.");
+          }
+        } catch (e) {
+          console.warn("[AppleMotion] Failed to patch Reanimated:", e);
         }
 
-        console.log("[AppleMotion] Plugin initialized with Apple spring dynamics.");
+        // 2. Hook React Native LayoutAnimation (used for expand/collapse, message deletions, categories)
+        try {
+          const LayoutAnimation = metro.findByProps("configureNext", "Presets");
+          if (LayoutAnimation && LayoutAnimation.configureNext) {
+            const origConfigureNext = LayoutAnimation.configureNext;
+            LayoutAnimation.configureNext = function (config, onComplete) {
+              if (config && config.update && config.update.type === "spring") {
+                config.update.springDamping = 0.85; // Apple HIG snappy damping ratio
+              }
+              return origConfigureNext.call(this, config, onComplete);
+            };
+            cleanups.push(() => {
+              LayoutAnimation.configureNext = origConfigureNext;
+            });
+            console.log("[AppleMotion] Patched LayoutAnimation.configureNext.");
+          }
+        } catch (e) {
+          console.warn("[AppleMotion] Failed to patch LayoutAnimation:", e);
+        }
+
+        // 3. Hook Legacy React Native Animated.spring (for legacy UI components)
+        try {
+          const Animated = metro.findByProps("spring", "timing", "decay");
+          if (Animated && Animated.spring && patcher) {
+            cleanups.push(
+              patcher.instead("spring", Animated, (args, orig) => {
+                const [value, config] = args;
+                const patched = Object.assign({}, config, {
+                  useNativeDriver: config.useNativeDriver !== undefined ? config.useNativeDriver : true,
+                  stiffness: AppleSpring.stiffness,
+                  damping: AppleSpring.damping,
+                  mass: AppleSpring.mass,
+                });
+                return orig(value, patched);
+              })
+            );
+            console.log("[AppleMotion] Patched Animated.spring.");
+          }
+        } catch (e) {
+          console.warn("[AppleMotion] Failed to patch Animated:", e);
+        }
+
+        console.log("[AppleMotion] All animation hooks installed.");
       } catch (err) {
-        console.error("[AppleMotion] Initialization error:", err);
+        console.error("[AppleMotion] Fatal initialization error:", err);
       }
     },
 
     onUnload: () => {
-      for (const unpatch of unpatches) {
+      for (const cleanup of cleanups) {
         try {
-          unpatch();
+          cleanup();
         } catch (_) {}
       }
-      unpatches = [];
-      console.log("[AppleMotion] Plugin unloaded.");
+      cleanups = [];
+      console.log("[AppleMotion] Plugin unloaded and all hooks restored.");
     },
   };
 
